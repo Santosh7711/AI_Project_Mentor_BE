@@ -42,6 +42,15 @@ SessionLocal = sessionmaker(
     bind=engine,
 )
 
+def get_db():
+    database_session = SessionLocal()
+
+    try:
+        yield database_session
+
+    finally:
+        database_session.close()
+
 
 def test_database_connection():
     with engine.connect() as connection:
