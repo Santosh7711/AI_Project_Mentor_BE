@@ -16,6 +16,15 @@ StatusValue = Literal[
     "Completed",
 ]
 
+AITaskType = Literal[
+    "Generate Project Plan",
+    "Break Requirement into Tasks",
+    "Recommend Next Task",
+    "Identify Project Blockers",
+    "Explain Implementation",
+    "Generate Testing Checklist",
+]
+
 
 # ---------------------------------------------------------
 # Project schemas
@@ -97,16 +106,26 @@ class TaskResponse(TaskBase):
 # AI interaction schemas
 # ---------------------------------------------------------
 
+# class AIPlanRequest(BaseModel):
+#     project_id: int = Field(gt=0)
+
+#     task_type: str = Field(
+#         min_length=2,
+#         max_length=100,
+#     )
+
+#     prompt: str = Field(
+#         min_length=5,
+#     )
+
 class AIPlanRequest(BaseModel):
     project_id: int = Field(gt=0)
 
-    task_type: str = Field(
-        min_length=2,
-        max_length=100,
-    )
+    task_type: AITaskType
 
     prompt: str = Field(
         min_length=5,
+        max_length=5000,
     )
 
 
@@ -120,3 +139,35 @@ class AIInteractionResponse(BaseModel):
     ai_response: str
     model_name: str | None = None
     created_at: datetime
+
+# ---------------------------------------------------------
+# Dashboard schemas
+# ---------------------------------------------------------
+
+class ProjectProgressResponse(BaseModel):
+    project_id: int
+    project_name: str
+    technology_stack: str
+    total_tasks: int
+    completed_tasks: int
+    progress_percentage: float
+
+
+class RecentTaskResponse(BaseModel):
+    task_id: int
+    title: str
+    project_id: int
+    project_name: str
+    priority: PriorityValue
+    status: StatusValue
+    updated_at: datetime | None = None
+
+
+class DashboardResponse(BaseModel):
+    total_projects: int
+    total_tasks: int
+    pending_tasks: int
+    in_progress_tasks: int
+    completed_tasks: int
+    project_progress: list[ProjectProgressResponse]
+    recent_tasks: list[RecentTaskResponse]
