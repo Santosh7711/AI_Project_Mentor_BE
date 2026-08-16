@@ -120,3 +120,35 @@ class AIInteractionResponse(BaseModel):
     ai_response: str
     model_name: str | None = None
     created_at: datetime
+
+# ---------------------------------------------------------
+# Dashboard schemas
+# ---------------------------------------------------------
+
+class ProjectProgressResponse(BaseModel):
+    project_id: int
+    project_name: str
+    technology_stack: str
+    total_tasks: int
+    completed_tasks: int
+    progress_percentage: float
+
+
+class RecentTaskResponse(BaseModel):
+    task_id: int
+    title: str
+    project_id: int
+    project_name: str
+    priority: PriorityValue
+    status: StatusValue
+    updated_at: datetime | None = None
+
+
+class DashboardResponse(BaseModel):
+    total_projects: int
+    total_tasks: int
+    pending_tasks: int
+    in_progress_tasks: int
+    completed_tasks: int
+    project_progress: list[ProjectProgressResponse]
+    recent_tasks: list[RecentTaskResponse]

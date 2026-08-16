@@ -1,5 +1,5 @@
 from fastapi import Depends, FastAPI, HTTPException, Response, status
-from sqlalchemy import select, text
+from sqlalchemy import case, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -7,6 +7,7 @@ from datetime import datetime
 from database import engine, get_db
 from models import Project, Task
 from schemas import (
+    DashboardResponse,
     ProjectCreate,
     ProjectResponse,
     ProjectUpdate,
@@ -407,4 +408,160 @@ def delete_task(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Task could not be deleted.",
+        ) from error
+
+
+# ---------------------------------------------------------
+# Dashboard endpoint
+# ---------------------------------------------------------
+
+@app.get(
+    "/api/dashboard",
+    response_model=DashboardResponse,
+    tags=["Dashboard"],
+)
+def get_dashboard(
+    db: Session = Depends(get_db),
+):
+    try:
+        total_projects = db.scalar(
+            select(func.count(Project.project_id))
+        ) or 0
+
+        total_tasks = db.scalar(
+            select(func.count(Task.task_id))
+        ) or 0
+
+        pending_tasks = db.scalar(
+            select(func.count(Task.task_id)).where(
+                Task.status == "Pending"
+            )
+        ) or 0
+
+        in_progress_tasks = db.scalar(
+            select(func.count(Task.task_id)).where(
+                Task.status == "In Progress"
+            )
+        ) or 0
+
+        completed_tasks = db.scalar(
+            select(func.count(Task.task_id)).where(
+                Task.status == "Completed"
+            )
+        ) or 0
+
+        progress_statement = (
+            select(
+                Project.project_id,
+                Project.project_name,
+                Project.technology_stack,
+                func.count(Task.task_id).label("total_tasks"),
+                func.sum(
+                    case(
+                        (Task.status == "Completed", 1),
+                        else_=0,
+                    )
+                ).label("completed_tasks"),
+            )
+            .outerjoin(
+                Task,
+                Project.project_id == Task.project_id,
+            )
+            .group_by(
+                Project.project_id,
+                Project.project_name,
+                Project.technology_stack,
+            )
+            .order_by(Project.project_id)
+        )
+
+        progress_rows = db.execute(
+            progress_statement
+        ).all()
+
+        project_progress = []
+
+        for row in progress_rows:
+            project_total = row.total_tasks or 0
+            project_completed = row.completed_tasks or 0
+
+            if project_total == 0:
+                progress_percentage = 0.0
+
+            else:
+                progress_percentage = round(
+                    (project_completed / project_total) * 100,
+                    2,
+                )
+
+            project_progress.append(
+                {
+                    "project_id": row.project_id,
+                    "project_name": row.project_name,
+                    "technology_stack": row.technology_stack,
+                    "total_tasks": project_total,
+                    "completed_tasks": project_completed,
+                    "progress_percentage": progress_percentage,
+                }
+            )
+
+        recent_tasks_statement = (
+            select(
+                Task.task_id,
+                Task.title,
+                Task.project_id,
+                Project.project_name,
+                Task.priority,
+                Task.status,
+                Task.updated_at,
+                Task.created_at,
+            )
+            .join(
+                Project,
+                Task.project_id == Project.project_id,
+            )
+            .order_by(
+                func.coalesce(
+                    Task.updated_at,
+                    Task.created_at,
+                ).desc()
+            )
+            .limit(5)
+        )
+
+        recent_task_rows = db.execute(
+            recent_tasks_statement
+        ).all()
+
+        recent_tasks = []
+
+        for row in recent_task_rows:
+            recent_tasks.append(
+                {
+                    "task_id": row.task_id,
+                    "title": row.title,
+                    "project_id": row.project_id,
+                    "project_name": row.project_name,
+                    "priority": row.priority,
+                    "status": row.status,
+                    "updated_at": (
+                        row.updated_at or row.created_at
+                    ),
+                }
+            )
+
+        return {
+            "total_projects": total_projects,
+            "total_tasks": total_tasks,
+            "pending_tasks": pending_tasks,
+            "in_progress_tasks": in_progress_tasks,
+            "completed_tasks": completed_tasks,
+            "project_progress": project_progress,
+            "recent_tasks": recent_tasks,
+        }
+
+    except SQLAlchemyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Dashboard data could not be retrieved.",
         ) from error
